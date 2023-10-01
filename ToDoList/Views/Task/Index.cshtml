@@ -1,0 +1,165 @@
+﻿@{
+    ViewData["Title"] = "Binokool";
+}
+<h4 class="mb-3 text-muted">Создание задачи</h4>
+<form id="createTaskForm">
+    <div class="mb-3">
+        <label class="form-label">Название задачи</label>
+        <input name="name" type="text" class="form-control"/>
+    </div>
+    <div class="mb-3">
+    <label class="form-label">Приоритет задачи</label>
+        <select name="priority" class="form-select mb-3" asp-items="Html.GetEnumSelectList<TaskPriority>()"></select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Полное описание задачи</label>
+        <textarea name="description" class="form-control" rows="3"></textarea>
+    </div>
+    <button class="button" id="createTask">Создать</button>
+</form>
+<br/>
+<div class="row">
+    <div class="col">
+        <label>Приоритет</label>
+        <select id="selectPriority" class="form-control" asp-items="Html.GetEnumSelectList<TaskPriority>()">
+            <option value="0">Все</option>
+        </select>
+        <h3 class="text-center">Список незавершенных задач</h3>
+        <table class="table table-dark table-hover mt-4 text-center" id="taskTableId">
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Приоритет</th>
+                    <th>Статус</th>
+                    <th>Дата создания</th>
+                    <th>Действия</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+</div>
+@section Scripts
+{
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="~/js/datatables.min.js"></script>
+    <script>
+        let selectedPriority = document.querySelector("#selectPriority").value;
+        const swalWithBootstrapButtons = Swal.mixin({
+            customClass: {
+                confirmButton: 'btn btn-success',
+            },
+            buttonsStyling: false
+        })
+        $('#createTask').on('click', function (e) {
+            e.preventDefault();
+            $.ajax({
+                type: 'POST',
+                url: '@Url.Action("Create","Task")',
+                data: $('#createTaskForm').serialize(),
+                success: function (response) {
+                    Swal.fire({
+                        title: 'Информация',
+                        text: response.description,
+                        icon: 'success',
+                        confirmButtonText: 'Окей'
+                    });
+                    taskTable.draw();
+                },
+                error: function (response) {
+                    Swal.fire({
+                        title: 'Информация',
+                        text: response.responseJSON.description,
+                        icon: 'error',
+                        confirmButtonText: 'Окей'
+                    })
+                }
+            })
+        });
+        let taskTable = $('#taskTableId').DataTable({
+            info: false,
+            serverSide: true,
+            searching: false,
+            paging: true,
+            sorting: false,
+            ajax: {
+                url: "@Url.Action("TaskHandler")",
+                method:'POST',
+                beforeSend: function (xhr) { xhr.setRequestHeader('Priority', `${selectedPriority}`); },
+                data: {}
+            },
+            columns:[
+                { data: 'name' },
+                { data: 'priority' },
+                { data: 'isCompleted' },
+                { data: 'dateTime' },
+                {
+                    data: null,
+                    sortable: false,
+                    render: function (data, type){
+                        return '<button class="btn btn-success btn-sm center-block mb-1">Выполнить</button>'
+                    }
+                },
+                {
+                    data: null,
+                    sortable: false,
+                    render: function (data, type) {
+                        return '<button class="btn btn-danger btn-sm center-block mb-1">Удалить</button>'
+                    }
+                }
+            ],
+            createdRow: function (nRow,data){
+                let compliteTaskHandler = function (message,action){
+                    swalWithBootstrapButtons.fire({
+                        title: message,
+                        icon: 'warning',
+                        confirmButtonText: 'Да',
+                        reverseButtons: true
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            $.ajax({
+                                method:'POST',
+                                data: {id: data.id},
+                                url: action,
+                                success: function (data) {
+                                    Swal.fire({
+                                        title: 'Информация',
+                                        text: data.description,
+                                        icon: 'success',
+                                        confirmButtonText: 'Окей'
+                                    });
+                                    taskTable.draw();
+                                },
+                                error: function (data) {
+                                    Swal.fire({
+                                        title: 'Информация',
+                                        text: data.description,
+                                        icon: 'error',
+                                        confirmButtonText: 'Окей'
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+                for (var i = 0; i < taskTable.columns().header().length - 1;i++) {
+                    $('td', nRow).eq(i).css('cursor', 'pointer');
+                    $('td', nRow).eq(i).attr('title', `${data.description}`);
+                }
+                $('td button.btn-success', nRow).on('click', () => {
+                    compliteTaskHandler('Вы действительно хотите выполнить задачу',"@Url.Action("EndTask")");
+                });
+                $('td button.btn-danger', nRow).on('click', () => {
+                    compliteTaskHandler('Вы действительно хотите удалить задачу', "@Url.Action("DeleteTask")");
+                });
+            }
+        });
+        
+        $('#selectPriority').on('change', function () {
+            selectedPriority = document.querySelector("#selectPriority").value;
+            taskTable.draw();
+        });
+    </script>
+}
